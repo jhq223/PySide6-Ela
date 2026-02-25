@@ -198,8 +198,9 @@ shiboken_cmd = [
     "--avoid-protected-hack",
 ]
 
-if msvc2019_include:
-    shiboken_cmd.append(f"--system-include-paths={msvc2019_include}")
+if sys.platform == "win32":
+    if msvc2019_include:
+        shiboken_cmd.append(f"--system-include-paths={msvc2019_include}")
 shiboken_cmd += [wrapper_path, xml_path]
 
 print(f"执行 Shiboken 命令: {' '.join(shiboken_cmd)}")
