@@ -37,6 +37,7 @@ cmake_args = [
     "-G",
     "Ninja",
     f"-DQT_SDK_DIR={qt_install_dir}",
+    f"-DCMAKE_PREFIX_PATH={qt_install_dir}",
     "-DELAWIDGETTOOLS_BUILD_STATIC_LIB=ON",
     "-DCMAKE_BUILD_TYPE=Release",
 ]
@@ -61,12 +62,10 @@ subprocess.run(
 print("--- 2. 生成 Shiboken Bindings ---")
 py_env = sys.executable
 
-# --- 新增：获取 Python libs 目录并注入环境变量，修复 LNK1104 找不到 python3.lib ---
 py_libs_dir = os.path.join(sysconfig.get_config_var("installed_base"), "libs")
 if sys.platform == "win32":
     os.environ["LIB"] = f"{py_libs_dir};{os.environ.get('LIB', '')}"
     print(f"已注入 Python Lib 目录到环境变量: {py_libs_dir}")
-# -------------------------------------------------------------------------
 
 binding_build_dir = "build_binding"
 os.makedirs(binding_build_dir, exist_ok=True)
@@ -135,10 +134,18 @@ bin_app = ".pyd" if sys.platform == "win32" else ".abi3.so"
 ela_include_path = os.path.abspath("ElaWidgetTools/ElaWidgetTools").replace("\\", "/")
 
 # 查找 shiboken6 可执行文件
-if sys.platform == "win32":
-    shiboken_bin = os.path.join(os.path.dirname(py_env), "shiboken6.exe")
-else:
-    shiboken_bin = os.path.join(os.path.dirname(py_env), "bin", "shiboken6")
+shiboken_exe = "shiboken6.exe" if sys.platform == "win32" else "shiboken6"
+shiboken_bin = os.path.join(site_pkgs, "shiboken6_generator", shiboken_exe).replace(
+    "\\", "/"
+)
+
+if not os.path.exists(shiboken_bin):
+    # 备用回退方案
+    fallback_dir = os.path.dirname(py_env)
+    if sys.platform == "win32":
+        shiboken_bin = os.path.join(fallback_dir, "shiboken6.exe").replace("\\", "/")
+    else:
+        shiboken_bin = os.path.join(fallback_dir, "shiboken6").replace("\\", "/")
 
 typesystems_dir = os.path.join(site_pkgs, "PySide6", "typesystems").replace("\\", "/")
 
