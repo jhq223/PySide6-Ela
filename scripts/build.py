@@ -71,13 +71,18 @@ os.makedirs(binding_build_dir, exist_ok=True)
 
 site_pkgs = (
     subprocess.run(
-        [py_env, "-c", "import site; print(site.getsitepackages()[-1])"],
+        [
+            py_env,
+            "-c",
+            "import PySide6, os; print(os.path.abspath(os.path.join(os.path.dirname(PySide6.__file__), '..')))",
+        ],
         capture_output=True,
         text=True,
     )
     .stdout.strip()
     .replace("\\", "/")
 )
+print(f"检测到 site-packages 目录: {site_pkgs}")
 
 subprocess.run(
     [
