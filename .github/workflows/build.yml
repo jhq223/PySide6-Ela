@@ -16,8 +16,10 @@ jobs:
         include:
           - os: windows-latest
             qt_arch: win64_msvc2019_64
+            qt_dir: msvc2019_64
           - os: ubuntu-latest
             qt_arch: gcc_64
+            qt_dir: gcc_64
     env:
       PYSIDE_VERSION: "6.6.2"
       PYTHONUTF8: "1" 
@@ -31,7 +33,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build libgl1-mesa-dev libxkbcommon-x11-dev libx11-xcb-dev libxext-dev libvulkan-dev
+          sudo apt-get install -y build-essential cmake ninja-build libgl1-mesa-dev libxkbcommon-x11-dev libx11-xcb-dev libxext-dev libvulkan-dev libclang-dev clang llvm
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -40,30 +42,20 @@ jobs:
         run: uv venv && uv sync
 
       - name: Download Qt C++
-        shell: bash
         run: |
-          source .venv/Scripts/activate || source .venv/bin/activate
-          aqt install-qt ${{ runner.os == 'Windows' && 'windows' || 'linux' }} desktop ${{ env.PYSIDE_VERSION }} ${{ matrix.qt_arch }} --outputdir ${{ github.workspace }}/Qt
+          uv run aqt install-qt ${{ runner.os == 'Windows' && 'windows' || 'linux' }} desktop ${{ env.PYSIDE_VERSION }} ${{ matrix.qt_arch }} --outputdir ${{ github.workspace }}/Qt
 
       - name: Setup MSVC (Windows only)
         if: runner.os == 'Windows'
-        uses: seanmiddleditch/gha-setup-vsdevenv@master
+        uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: amd64
+          arch: x64
 
       - name: Build and Package Wheel
-        shell: bash
+        env:
+          QT_DIR: ${{ github.workspace }}/Qt/${{ env.PYSIDE_VERSION }}/${{ matrix.qt_dir }}
         run: |
-          source .venv/Scripts/activate || source .venv/bin/activate
-        
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            QT_DIR_NAME="msvc2019_64"
-          else
-            QT_DIR_NAME="gcc_64"
-          fi
-        
-          export QT_DIR="${{ github.workspace }}/Qt/${{ env.PYSIDE_VERSION }}/${QT_DIR_NAME}"
-          python scripts/build.py
+          uv run python scripts/build.py
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4

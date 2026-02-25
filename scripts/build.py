@@ -8,7 +8,6 @@ import sysconfig
 if len(sys.argv) > 1:
     qt_install_dir = sys.argv[1].replace("\\", "/")
 else:
-    # 适配 Github Action 中的环境变量
     qt_install_dir = os.environ.get("QT_DIR", "").replace("\\", "/")
     if not qt_install_dir:
         raise ValueError("请提供 QT_DIR 环境变量或通过参数传入 Qt 安装路径")
@@ -37,7 +36,7 @@ cmake_args = [
     "-G",
     "Ninja",
     f"-DQT_SDK_DIR={qt_install_dir}",
-    f"-DCMAKE_PREFIX_PATH={qt_install_dir}",
+    f"-DCMAKE_PREFIX_PATH={qt_install_dir};{qt_install_dir}/lib/cmake",
     "-DELAWIDGETTOOLS_BUILD_STATIC_LIB=ON",
     "-DCMAKE_BUILD_TYPE=Release",
 ]
@@ -106,7 +105,6 @@ if sys.platform == "win32":
     ela_lib_path = os.path.abspath(
         "ElaWidgetTools/build/ElaWidgetTools/ElaWidgetTools.lib"
     ).replace("\\", "/")
-    # Windows 下寻找 .lib
     lib_ext = ".lib"
     ps_kw = "pyside6.abi3"
     sh_kw = "shiboken6.abi3"
@@ -114,12 +112,10 @@ else:
     ela_lib_path = os.path.abspath(
         "ElaWidgetTools/build/ElaWidgetTools/libElaWidgetTools.a"
     ).replace("\\", "/")
-    # macOS 下是 .dylib，Linux 下是 .so
     lib_ext = ".dylib" if sys.platform == "darwin" else ".so"
     ps_kw = "libpyside6.abi3"
     sh_kw = "libshiboken6.abi3"
 
-# 跨平台查找 PySide6 和 shiboken6 依赖库
 try:
     pyside_lib = next(
         f for f in os.listdir(f"{site_pkgs}/PySide6") if ps_kw in f and lib_ext in f
@@ -133,14 +129,12 @@ except StopIteration:
 bin_app = ".pyd" if sys.platform == "win32" else ".abi3.so"
 ela_include_path = os.path.abspath("ElaWidgetTools/ElaWidgetTools").replace("\\", "/")
 
-# 查找 shiboken6 可执行文件
 shiboken_exe = "shiboken6.exe" if sys.platform == "win32" else "shiboken6"
 shiboken_bin = os.path.join(site_pkgs, "shiboken6_generator", shiboken_exe).replace(
     "\\", "/"
 )
 
 if not os.path.exists(shiboken_bin):
-    # 备用回退方案
     fallback_dir = os.path.dirname(py_env)
     if sys.platform == "win32":
         shiboken_bin = os.path.join(fallback_dir, "shiboken6.exe").replace("\\", "/")
@@ -156,13 +150,17 @@ xml_path = os.path.abspath(f"{binding_build_dir}/bindings.xml").replace("\\", "/
 wrapper_path = os.path.abspath(f"{binding_build_dir}/wrapper.hpp").replace("\\", "/")
 
 
-# 查找 MSVC 14.29 include 路径（修复 shiboken 解析新版 MSVC STL 报错）
 def find_msvc2019_include():
     if sys.platform != "win32":
         return None
-    vswhere = os.path.expandvars(
-        r"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+    pf_x86 = os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")
+    vswhere = os.path.join(
+        pf_x86, "Microsoft Visual Studio", "Installer", "vswhere.exe"
     )
+
+    if not os.path.exists(vswhere):
+        return None
+
     try:
         vs_path = subprocess.check_output(
             [vswhere, "-latest", "-prerelease", "-property", "installationPath"],
@@ -173,17 +171,18 @@ def find_msvc2019_include():
         for d in versions:
             if d.startswith("14.29"):
                 return os.path.join(msvc_base, d, "include").replace("\\", "/")
-        return os.path.join(msvc_base, versions[0], "include").replace("\\", "/")
+        return os.path.join(msvc_base, versions[-1], "include").replace("\\", "/")
     except Exception as e:
         print(f"vswhere 查找失败: {e}")
         return None
 
 
-msvc2019_include = find_msvc2019_include()
-if msvc2019_include:
-    print(f"使用 MSVC 14.29 STL 路径: {msvc2019_include}")
-else:
-    print("⚠️ 未找到 MSVC 14.29，shiboken 可能报错")
+if sys.platform == "win32":
+    msvc2019_include = find_msvc2019_include()
+    if msvc2019_include:
+        print(f"使用 MSVC STL 路径: {msvc2019_include}")
+    else:
+        print("⚠️ 未找到 MSVC")
 
 shiboken_cmd = [
     shiboken_bin,
@@ -199,13 +198,22 @@ shiboken_cmd = [
     "--avoid-protected-hack",
 ]
 
-# 关键：注入 14.29 路径
 if msvc2019_include:
     shiboken_cmd.append(f"--system-include-paths={msvc2019_include}")
 shiboken_cmd += [wrapper_path, xml_path]
 
 print(f"执行 Shiboken 命令: {' '.join(shiboken_cmd)}")
-subprocess.run(shiboken_cmd, check=True)
+
+try:
+    subprocess.run(shiboken_cmd, check=True)
+except subprocess.CalledProcessError as e:
+    print("\n❌ Shiboken 执行失败！正在重新捕获日志输出...")
+    result = subprocess.run(shiboken_cmd, capture_output=True, text=True)
+    print("=== Shiboken STDOUT ===")
+    print(result.stdout)
+    print("=== Shiboken STDERR ===")
+    print(result.stderr)
+    raise e
 
 bind_cmake_args = [
     "cmake",
@@ -262,7 +270,6 @@ with open(f"{wheel_dir}/__init__.py", "w", encoding="utf8") as f:
 
 print("--- 正在生成 .pyi 类型提示存根 ---")
 try:
-    # 临时将 src 目录加入 PYTHONPATH 环境变量，让 stubgen 能找到刚才生成的扩展
     env = os.environ.copy()
     env["PYTHONPATH"] = os.path.abspath("src") + os.pathsep + env.get("PYTHONPATH", "")
 
@@ -277,13 +284,11 @@ try:
         subprocess.run(
             [stubgen_bin, "-p", "PySide6_Ela", "-o", "src"], env=env, check=True
         )
-
         print("✅ 成功生成 PySide6_Ela 类型提示文件！")
 except subprocess.CalledProcessError as e:
     print(f"⚠️ 生成 .pyi 文件失败: {e}")
 except Exception as e:
     print(f"⚠️ 发生错误: {e}")
-
 
 print("--- 5. 生成 Wheel ---")
 subprocess.run(["uv", "build", "--wheel", "--out-dir", dist_dir], check=True)
