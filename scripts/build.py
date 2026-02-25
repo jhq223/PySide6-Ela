@@ -216,6 +216,22 @@ except subprocess.CalledProcessError as e:
     print(result.stderr)
     raise e
 
+# 修复 Shiboken 在 Linux 下的宏缺陷
+elamessagebar_cpp = os.path.abspath(
+    f"{output_dir}/PySide6_Ela/elamessagebar_wrapper.cpp"
+)
+
+if os.path.exists(elamessagebar_cpp):
+    with open(elamessagebar_cpp, "r", encoding="utf-8") as f:
+        cpp_content = f.read()
+
+    # 将包含未解析宏的错误 C++ 语法移除
+    if "::%CLASS_NAME::" in cpp_content:
+        cpp_content = cpp_content.replace("::%CLASS_NAME::", "")
+        with open(elamessagebar_cpp, "w", encoding="utf-8") as f:
+            f.write(cpp_content)
+        print("✅ 已修复 elamessagebar_wrapper.cpp 中的 %CLASS_NAME 语法错误")
+
 bind_cmake_args = [
     "cmake",
     "-G",
