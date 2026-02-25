@@ -3,7 +3,7 @@ name: Build and Publish
 on:
   push:
     branches: [ main ]
-    tags: [ 'v*' ] 
+    tags: [ 'v*' ]
   workflow_dispatch:
 
 jobs:
@@ -17,7 +17,6 @@ jobs:
             qt_arch: win64_msvc2019_64
           - os: ubuntu-latest
             qt_arch: gcc_64
-
     env:
       PYSIDE_VERSION: "6.6.2"
 
@@ -25,6 +24,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: 'recursive'
+
+      - name: Install System Dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build libgl1-mesa-dev libxkbcommon-x11-dev libx11-xcb-dev libxext-dev libvulkan-dev
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -48,15 +53,14 @@ jobs:
         shell: bash
         run: |
           source .venv/Scripts/activate || source .venv/bin/activate
-          
+        
           if [ "$RUNNER_OS" == "Windows" ]; then
             QT_DIR_NAME="msvc2019_64"
           else
             QT_DIR_NAME="gcc_64"
           fi
-          
+        
           export QT_DIR="${{ github.workspace }}/Qt/${{ env.PYSIDE_VERSION }}/${QT_DIR_NAME}"
-          # 核心构建脚本
           python scripts/build.py
 
       - name: Upload Artifacts
@@ -71,20 +75,17 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
-      id-token: write # 必须：用于 PyPI OIDC 认证
+      id-token: write
       contents: read
-    
+  
     steps:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
-
       - name: Download all wheels
         uses: actions/download-artifact@v4
         with:
           path: dist
           pattern: wheels-*
           merge-multiple: true
-
       - name: Publish to PyPI
-        # 自动识别环境并发布到 PyPI
         run: uv publish --trusted-publishing always dist/*

@@ -39,13 +39,19 @@ cmake_args = [
     f"-DQT_SDK_DIR={qt_install_dir}",
     "-DELAWIDGETTOOLS_BUILD_STATIC_LIB=ON",
     "-DCMAKE_BUILD_TYPE=Release",
-    # --- 新增：强制设置 MSVC 运行时库为 /MD，匹配 Python 扩展的要求，修复 LNK2038 ---
-    "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW",
-    "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded$<$<CONFIG:Debug>:Debug>DLL",
-    "..",
 ]
 
+if sys.platform == "win32":
+    cmake_args.extend(
+        [
+            "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW",
+            "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded$<$CONFIG:Debug:Debug>DLL",
+        ]
+    )
+
+cmake_args.append("..")
 subprocess.run(cmake_args, cwd=ela_build_dir, check=True)
+
 subprocess.run(
     ["cmake", "--build", ".", "--config", "Release", "-j", str(os.cpu_count())],
     cwd=ela_build_dir,

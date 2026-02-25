@@ -45,9 +45,8 @@ target_compile_definitions(PySide6_Ela PRIVATE "-DPy_LIMITED_API=0x03090000")
 
 # 7. 解决 Windows 下后缀名必须为 .pyd 的要求
 set_target_properties(PySide6_Ela PROPERTIES SUFFIX "${dllSUFFIX}")
-if(WIN32)
-    set_target_properties(PySide6_Ela PROPERTIES PREFIX "")
-endif()
+set_target_properties(PySide6_Ela PROPERTIES PREFIX "")
+
 
 # 8. 链接库目录与依赖
 target_link_directories(PySide6_Ela PRIVATE
