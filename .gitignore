@@ -1,0 +1,23 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+.qt/
+build_binding/
+aqtinstall.log
+OUTPUTDIR/
+
+# 忽略编译产物
+*.pyd
+*.so
+*.dll
+*.lib
+*.a
+*.pyi

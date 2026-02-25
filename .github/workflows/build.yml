@@ -1,0 +1,90 @@
+name: Build and Publish
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ] 
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build wheel on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            qt_arch: win64_msvc2019_64
+          - os: ubuntu-latest
+            qt_arch: gcc_64
+
+    env:
+      PYSIDE_VERSION: "6.6.2"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Setup Python environment
+        run: uv venv && uv sync
+
+      - name: Download Qt C++
+        shell: bash
+        run: |
+          source .venv/Scripts/activate || source .venv/bin/activate
+          aqt install-qt ${{ runner.os == 'Windows' && 'windows' || 'linux' }} desktop ${{ env.PYSIDE_VERSION }} ${{ matrix.qt_arch }} --outputdir ${{ github.workspace }}/Qt
+
+      - name: Setup MSVC (Windows only)
+        if: runner.os == 'Windows'
+        uses: seanmiddleditch/gha-setup-vsdevenv@master
+        with:
+          arch: amd64
+
+      - name: Build and Package Wheel
+        shell: bash
+        run: |
+          source .venv/Scripts/activate || source .venv/bin/activate
+          
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            QT_DIR_NAME="msvc2019_64"
+          else
+            QT_DIR_NAME="gcc_64"
+          fi
+          
+          export QT_DIR="${{ github.workspace }}/Qt/${{ env.PYSIDE_VERSION }}/${QT_DIR_NAME}"
+          # 核心构建脚本
+          python scripts/build.py
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: wheel/dist/*.whl
+
+  publish:
+    name: Publish to PyPI
+    needs: [build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # 必须：用于 PyPI OIDC 认证
+      contents: read
+    
+    steps:
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Download all wheels
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: wheels-*
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        # 自动识别环境并发布到 PyPI
+        run: uv publish --trusted-publishing always dist/*
