@@ -63,7 +63,7 @@ jobs:
           QT_DIR: ${{ github.workspace }}/Qt/${{ env.PYSIDE_VERSION }}/${{ matrix.qt_dir }}
         run: |
           export LD_LIBRARY_PATH=$QT_DIR/lib:$LD_LIBRARY_PATH
-          uv run auditwheel repair wheel/dist/*.whl --plat manylinux_2_28_x86_64 -w wheel/dist/fixed/
+          uv run auditwheel repair wheel/dist/*.whl --plat manylinux_2_35_x86_64 -w wheel/dist/fixed/
           rm wheel/dist/*.whl && mv wheel/dist/fixed/*.whl wheel/dist/
           uv run python -m wheel tags --python-tag cp39 --abi-tag abi3 --remove wheel/dist/*.whl
 
