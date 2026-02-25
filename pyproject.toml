@@ -1,6 +1,6 @@
 [project]
 name = "PySide6-Ela"
-version = "0.1.1"
+version = "0.1.2"
 description = "Python binding for ElaWidgetTools based on PySide6"
 readme = "README.md"
 requires-python = ">=3.9"
