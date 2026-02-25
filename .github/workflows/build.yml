@@ -11,6 +11,7 @@ jobs:
     name: Build wheel on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
@@ -19,6 +20,7 @@ jobs:
             qt_arch: gcc_64
     env:
       PYSIDE_VERSION: "6.6.2"
+      PYTHONUTF8: "1" 
 
     steps:
       - uses: actions/checkout@v4
