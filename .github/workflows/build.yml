@@ -54,7 +54,8 @@ jobs:
       - name: Build and Package Wheel
         env:
           QT_DIR: ${{ github.workspace }}/Qt/${{ env.PYSIDE_VERSION }}/${{ matrix.qt_dir }}
-        run: uv run python scripts/build.py
+        run: |
+          uv run python scripts/build.py
 
       - name: Fix Wheel for PyPI (Linux)
         if: runner.os == 'Linux'
@@ -62,7 +63,7 @@ jobs:
           QT_DIR: ${{ github.workspace }}/Qt/${{ env.PYSIDE_VERSION }}/${{ matrix.qt_dir }}
         run: |
           export LD_LIBRARY_PATH=$QT_DIR/lib:$LD_LIBRARY_PATH
-          uv run auditwheel repair wheel/dist/*.whl --plat manylinux2014_x86_64 -w wheel/dist/fixed/
+          uv run auditwheel repair wheel/dist/*.whl --plat manylinux_2_28_x86_64 -w wheel/dist/fixed/
           rm wheel/dist/*.whl && mv wheel/dist/fixed/*.whl wheel/dist/
           uv run python -m wheel tags --python-tag cp39 --abi-tag abi3 --remove wheel/dist/*.whl
 
@@ -70,7 +71,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          uv run python -m wheel tags --python-tag cp39 --abi-tag abi3 --platform-tag win_amd64 --remove wheel/dist/*.whl
+          Get-ChildItem wheel/dist/*.whl | ForEach-Object {
+            uv run python -m wheel tags --python-tag cp39 --abi-tag abi3 --platform-tag win_amd64 --remove $_.FullName
+          }
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
