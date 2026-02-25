@@ -4,20 +4,17 @@ version = "0.1.1"
 description = "Python binding for ElaWidgetTools based on PySide6"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "LGPL-3.0-only" }
+license = "LGPL-3.0-only"
+
 classifiers = [
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)",
-
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
-
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = ["PySide6==6.6.2"]
@@ -41,4 +38,6 @@ dev = [
     "aqtinstall",
     "ninja",
     "mypy",
+    "wheel",
+    "auditwheel",
 ]

@@ -269,14 +269,18 @@ else:
 init_content = """from PySide6 import QtCore, QtWidgets, QtGui
 from .PySide6_Ela import *
 
-def __wrapsingleton(T):
-    class __Wrapper:
-        def __getattr__(self, name):
-            return getattr(T.getInstance(), name)
-    return __Wrapper()
+class _SingletonWrapper:
+    def __init__(self, cls):
+        self.__dict__['_cls'] = cls
+        
+    def __getattr__(self, name):
+        return getattr(self._cls.getInstance(), name)
+        
+    def __dir__(self):
+        return dir(self._cls.getInstance())
 
-eTheme = __wrapsingleton(ElaTheme)
-eApp = __wrapsingleton(ElaApplication)
+eTheme = _SingletonWrapper(ElaTheme)
+eApp = _SingletonWrapper(ElaApplication)
 
 def ElaThemeColor(themeMode, themeColor):
     return eTheme.getThemeColor(themeMode, themeColor)
@@ -288,24 +292,31 @@ with open(f"{wheel_dir}/__init__.py", "w", encoding="utf8") as f:
 print("--- 正在生成 .pyi 类型提示存根 ---")
 try:
     env = os.environ.copy()
-    env["PYTHONPATH"] = os.path.abspath("src") + os.pathsep + env.get("PYTHONPATH", "")
+
+    abs_src_path = os.path.abspath("src")
+    env["PYTHONPATH"] = abs_src_path + os.pathsep + env.get("PYTHONPATH", "")
 
     if sys.platform == "win32":
-        stubgen_bin = os.path.join(os.path.dirname(py_env), "stubgen.exe")
-    else:
-        stubgen_bin = os.path.join(os.path.dirname(py_env), "stubgen")
-
-    if not os.path.exists(stubgen_bin):
-        print(f"⚠️ 未找到 {stubgen_bin}，请确保已安装 mypy (uv sync)")
-    else:
-        subprocess.run(
-            [stubgen_bin, "-p", "PySide6_Ela", "-o", "src"], env=env, check=True
+        qt_bin = os.path.join(qt_install_dir, "bin").replace("\\", "/")
+        pyside_dir = os.path.join(site_pkgs, "PySide6").replace("\\", "/")
+        env["PATH"] = (
+            f"{qt_bin}{os.pathsep}{pyside_dir}{os.pathsep}{env.get('PATH', '')}"
         )
-        print("✅ 成功生成 PySide6_Ela 类型提示文件！")
+
+    stubgen_script = (
+        "import sys; "
+        "from mypy.stubgen import main; "
+        "sys.argv = ['stubgen', '-p', 'PySide6_Ela', '-o', 'src', '--inspect-mode']; "
+        "main()"
+    )
+
+    subprocess.run([sys.executable, "-c", stubgen_script], env=env, check=True)
+    print("✅ 成功生成 PySide6_Ela 类型提示文件！")
+
 except subprocess.CalledProcessError as e:
-    print(f"⚠️ 生成 .pyi 文件失败: {e}")
+    print(f"错误信息: {e}")
 except Exception as e:
-    print(f"⚠️ 发生错误: {e}")
+    print(f"⚠️ 发生未知错误: {e}")
 
 print("--- 5. 生成 Wheel ---")
 subprocess.run(["uv", "build", "--wheel", "--out-dir", dist_dir], check=True)
