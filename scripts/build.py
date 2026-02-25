@@ -45,7 +45,7 @@ if sys.platform == "win32":
     cmake_args.extend(
         [
             "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW",
-            "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded$<$CONFIG:Debug:Debug>DLL",
+            "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
         ]
     )
 
@@ -107,21 +107,29 @@ if sys.platform == "win32":
     ela_lib_path = os.path.abspath(
         "ElaWidgetTools/build/ElaWidgetTools/ElaWidgetTools.lib"
     ).replace("\\", "/")
+    # Windows 下寻找 .lib
+    lib_ext = ".lib"
+    ps_kw = "pyside6.abi3"
+    sh_kw = "shiboken6.abi3"
 else:
     ela_lib_path = os.path.abspath(
         "ElaWidgetTools/build/ElaWidgetTools/libElaWidgetTools.a"
     ).replace("\\", "/")
+    # macOS 下是 .dylib，Linux 下是 .so
+    lib_ext = ".dylib" if sys.platform == "darwin" else ".so"
+    ps_kw = "libpyside6.abi3"
+    sh_kw = "libshiboken6.abi3"
 
-pyside_lib = next(
-    f
-    for f in os.listdir(f"{site_pkgs}/PySide6")
-    if f.endswith(".lib") and "pyside6.abi3" in f
-)
-shiboken_lib = next(
-    f
-    for f in os.listdir(f"{site_pkgs}/shiboken6")
-    if f.endswith(".lib") and "shiboken6.abi3" in f
-)
+# 跨平台查找 PySide6 和 shiboken6 依赖库
+try:
+    pyside_lib = next(
+        f for f in os.listdir(f"{site_pkgs}/PySide6") if ps_kw in f and lib_ext in f
+    )
+    shiboken_lib = next(
+        f for f in os.listdir(f"{site_pkgs}/shiboken6") if sh_kw in f and lib_ext in f
+    )
+except StopIteration:
+    raise FileNotFoundError(f"找不到对应的动态库！请检查 {site_pkgs} 目录。")
 
 bin_app = ".pyd" if sys.platform == "win32" else ".abi3.so"
 ela_include_path = os.path.abspath("ElaWidgetTools/ElaWidgetTools").replace("\\", "/")
