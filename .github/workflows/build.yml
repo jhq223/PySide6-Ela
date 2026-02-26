@@ -63,8 +63,71 @@ jobs:
           QT_DIR: ${{ github.workspace }}/Qt/${{ env.PYSIDE_VERSION }}/${{ matrix.qt_dir }}
         run: |
           export LD_LIBRARY_PATH=$QT_DIR/lib:$LD_LIBRARY_PATH
-          uv run auditwheel repair wheel/dist/*.whl --plat manylinux_2_35_x86_64 -w wheel/dist/fixed/
+          uv run auditwheel show wheel/dist/*.whl | tee wheel/dist/auditwheel-show.txt
+          EXCLUDE_LIBS=$(uv run python - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+          
+          show_output = Path("wheel/dist/auditwheel-show.txt").read_text(encoding="utf-8")
+          blocks = re.findall(
+              r"The following external shared libraries are required by the wheel:\n(\{.*?\})",
+              show_output,
+              re.S,
+          )
+          
+          libs = set()
+          for block in blocks:
+              try:
+                  data = json.loads(block)
+              except json.JSONDecodeError:
+                  continue
+              for lib_name in data:
+                  if (
+                      lib_name.startswith("libQt6")
+                      or lib_name.startswith("libpyside6.abi3.so")
+                      or lib_name.startswith("libshiboken6.abi3.so")
+                  ):
+                      libs.add(lib_name)
+          
+          print("\n".join(sorted(libs)))
+          PY
+          )
+
+          EXCLUDE_ARGS=()
+          if [ -n "$EXCLUDE_LIBS" ]; then
+            while IFS= read -r lib; do
+              [ -n "$lib" ] && EXCLUDE_ARGS+=(--exclude "$lib")
+            done <<< "$EXCLUDE_LIBS"
+          fi
+
+          uv run auditwheel repair wheel/dist/*.whl --plat manylinux_2_35_x86_64 "${EXCLUDE_ARGS[@]}" -w wheel/dist/fixed/
           rm wheel/dist/*.whl && mv wheel/dist/fixed/*.whl wheel/dist/
+          uv run python - <<'PY'
+          import glob
+          import sys
+          import zipfile
+          
+          blocked_prefixes = ("libQt6", "libpyside6.abi3.so", "libshiboken6.abi3.so")
+          errors = []
+          
+          for whl_path in glob.glob("wheel/dist/*.whl"):
+              with zipfile.ZipFile(whl_path, "r") as zf:
+                  for name in zf.namelist():
+                      if ".libs/" not in name:
+                          continue
+                      lib_name = name.rsplit("/", 1)[-1]
+                      if lib_name.startswith(blocked_prefixes):
+                          errors.append(f"{whl_path}: {name}")
+          
+          if errors:
+              print("Detected forbidden bundled runtime libraries:")
+              for err in errors:
+                  print(f"  - {err}")
+              sys.exit(1)
+          
+          print("Wheel runtime check passed: no Qt/PySide/Shiboken vendored libs found.")
+          PY
           uv run python -m wheel tags --python-tag cp39 --abi-tag abi3 --remove wheel/dist/*.whl
 
       - name: Fix Wheel for PyPI (Windows)
