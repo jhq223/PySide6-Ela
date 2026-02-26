@@ -15,6 +15,30 @@ output_dir = sys.argv[3] if len(sys.argv) > 3 else "."
 os.makedirs(output_dir, exist_ok=True)
 
 
+def patch_ela_property_header():
+    """
+    兼容 Shiboken 对宏内 Q_SIGNAL 的解析问题，避免属性变更信号被识别为普通方法。
+    """
+    header_path = os.path.join(eladir, "ElaProperty.h")
+    if not os.path.exists(header_path):
+        return
+
+    with open(header_path, "r", encoding="utf8") as ff:
+        content = ff.read()
+
+    if "Q_SIGNALS:Q_SIGNAL" in content:
+        return
+
+    patched = re.sub(
+        r"Q_SIGNAL(.*?)\\",
+        r"Q_SIGNALS:Q_SIGNAL \1\\\npublic:\\",
+        content,
+    )
+    if patched != content:
+        with open(header_path, "w", encoding="utf8") as ff:
+            ff.write(patched)
+
+
 def gen_layout_helper(out_dir):
     """
     生成辅助头文件，包含 Shiboken 在生成 Layout 绑定时缺失的 addLayoutOwnership 内部实现。
@@ -128,25 +152,173 @@ inline void addLayoutOwnership(QLayout *layout, QLayoutItem *item) {
         f.write(helper_code)
 
 
+def gen_navigation_specials(is_const):
+    const_suffix = " const" if is_const else ""
+    return f"""
+        <modify-function signature="addFooterNode(const QString &amp;, QString &amp;, int, ElaIconType::IconName){const_suffix}">
+            <modify-argument index="2">
+                <remove-argument/>
+            </modify-argument>
+            <inject-code class="target" position="beginning">
+                QString footerKey;
+                ElaNavigationType::NodeResult cppRes =
+                    %CPPSELF.addFooterNode(%1, footerKey, %3, %4);
+
+                #ifndef SBK_QString_IDX
+                #define SBK_QString_IDX SBK_QSTRING_IDX
+                #endif
+                #ifndef SbkPySide6_ElaTypeStructs
+                #define SbkPySide6_ElaTypeStructs SbkPySide6_ElaTypes
+                #endif
+
+                PyObject* pyRes = Shiboken::Conversions::copyToPython(
+                    PepType_SETP(reinterpret_cast&lt;SbkEnumType *&gt;(SbkPySide6_ElaTypeStructs[SBK_ELANAVIGATIONTYPE_NODERESULT_IDX]))-&gt;converter,
+                    &amp;cppRes);
+
+                PyObject* pyFooterKey = Shiboken::Conversions::copyToPython(
+                    SbkPySide6_QtCoreTypeConverters[SBK_QString_IDX],
+                    &amp;footerKey);
+
+                return Py_BuildValue("(NN)", pyRes, pyFooterKey);
+            </inject-code>
+        </modify-function>
+        <modify-function signature="addFooterNode(const QString &amp;, QWidget *, QString &amp;, int, ElaIconType::IconName)">
+            <modify-argument index="3">
+                <remove-argument/>
+            </modify-argument>
+            <inject-code class="target" position="beginning">
+                QString footerKey;
+                ElaNavigationType::NodeResult cppRes =
+                    %CPPSELF.addFooterNode(%1, %2, footerKey, %4, %5);
+
+                #ifndef SBK_QString_IDX
+                #define SBK_QString_IDX SBK_QSTRING_IDX
+                #endif
+                #ifndef SbkPySide6_ElaTypeStructs
+                #define SbkPySide6_ElaTypeStructs SbkPySide6_ElaTypes
+                #endif
+
+                PyObject* pyRes = Shiboken::Conversions::copyToPython(
+                    PepType_SETP(reinterpret_cast&lt;SbkEnumType *&gt;(SbkPySide6_ElaTypeStructs[SBK_ELANAVIGATIONTYPE_NODERESULT_IDX]))-&gt;converter,
+                    &amp;cppRes);
+
+                PyObject* pyFooterKey = Shiboken::Conversions::copyToPython(
+                    SbkPySide6_QtCoreTypeConverters[SBK_QString_IDX],
+                    &amp;footerKey);
+
+                return Py_BuildValue("(NN)", pyRes, pyFooterKey);
+            </inject-code>
+        </modify-function>
+        <modify-function signature="addExpanderNode(const QString &amp;, QString &amp;, ElaIconType::IconName){const_suffix}">
+            <modify-argument index="2">
+                <remove-argument/>
+            </modify-argument>
+            <inject-code class="target" position="beginning">
+                QString expanderKey;
+                ElaNavigationType::NodeResult cppRes =
+                    %CPPSELF.addExpanderNode(%1, expanderKey, %3);
+
+                #ifndef SBK_QString_IDX
+                #define SBK_QString_IDX SBK_QSTRING_IDX
+                #endif
+                #ifndef SbkPySide6_ElaTypeStructs
+                #define SbkPySide6_ElaTypeStructs SbkPySide6_ElaTypes
+                #endif
+
+                PyObject* pyRes = Shiboken::Conversions::copyToPython(
+                    PepType_SETP(reinterpret_cast&lt;SbkEnumType *&gt;(SbkPySide6_ElaTypeStructs[SBK_ELANAVIGATIONTYPE_NODERESULT_IDX]))-&gt;converter,
+                    &amp;cppRes);
+
+                PyObject* pyExpanderKey = Shiboken::Conversions::copyToPython(
+                    SbkPySide6_QtCoreTypeConverters[SBK_QString_IDX],
+                    &amp;expanderKey);
+
+                return Py_BuildValue("(NN)", pyRes, pyExpanderKey);
+            </inject-code>
+        </modify-function>
+        <modify-function signature="addExpanderNode(const QString &amp;, QString &amp;, const QString &amp;, ElaIconType::IconName){const_suffix}">
+            <modify-argument index="2">
+                <remove-argument/>
+            </modify-argument>
+            <inject-code class="target" position="beginning">
+                QString expanderKey;
+                ElaNavigationType::NodeResult cppRes =
+                    %CPPSELF.addExpanderNode(%1, expanderKey, %3, %4);
+
+                #ifndef SBK_QString_IDX
+                #define SBK_QString_IDX SBK_QSTRING_IDX
+                #endif
+                #ifndef SbkPySide6_ElaTypeStructs
+                #define SbkPySide6_ElaTypeStructs SbkPySide6_ElaTypes
+                #endif
+
+                PyObject* pyRes = Shiboken::Conversions::copyToPython(
+                    PepType_SETP(reinterpret_cast&lt;SbkEnumType *&gt;(SbkPySide6_ElaTypeStructs[SBK_ELANAVIGATIONTYPE_NODERESULT_IDX]))-&gt;converter,
+                    &amp;cppRes);
+
+                PyObject* pyExpanderKey = Shiboken::Conversions::copyToPython(
+                    SbkPySide6_QtCoreTypeConverters[SBK_QString_IDX],
+                    &amp;expanderKey);
+
+                return Py_BuildValue("(NN)", pyRes, pyExpanderKey);
+            </inject-code>
+        </modify-function>
+        <modify-function signature="addCategoryNode(const QString &amp;, QString &amp;)">
+            <modify-argument index="2" direction="out"/>
+        </modify-function>
+        <modify-function signature="addCategoryNode(const QString &amp;, QString &amp;, const QString &amp;)">
+            <modify-argument index="2" direction="out"/>
+        </modify-function>
+        <modify-function signature="addPageNode(const QString &amp;, QWidget *, int, ElaIconType::IconName)" rename="addPageNodeKeyPoints"/>
+        <modify-function signature="addPageNode(const QString &amp;, QWidget *, const QString &amp;, int, ElaIconType::IconName)" rename="addPageNodeKeyPoints"/>
+"""
+
+
 def gen_defs():
     with open(os.path.join(eladir, "ElaDef.h"), "r", encoding="utf8") as ff:
         header_content = ff.read()
 
     block_pattern = re.compile(
-        r"Q_BEGIN_ENUM_CREATE\s*\(\s*(\w+)\s*\)\s*(.*?)\s*Q_END_ENUM_CREATE", re.DOTALL
+        r"Q_BEGIN_ENUM_CREATE\s*\(\s*(\w+)\s*\)\s*(.*?)\s*Q_END_ENUM_CREATE\s*\(\s*\1\s*\)",
+        re.DOTALL,
     )
-    enum_pattern = re.compile(r"enum\s+(\w+)\s*\{(.*?)\};", re.DOTALL)
+    enum_pattern = re.compile(
+        r"enum\s+(\w+)\s*\{(.*?)\};.*?Q_ENUM_CREATE\s*\(\s*\1\s*\)",
+        re.DOTALL,
+    )
+    qflags_pattern = re.compile(
+        r"Q_DECLARE_FLAGS\s*\(\s*(\w+)\s*,\s*(\w+(?:::\w+)?)\s*\)"
+    )
 
-    output = ""
+    flags = {}
+    enums_by_namespace = []
+
     for block_match in block_pattern.finditer(header_content):
         namespace = block_match.group(1)
         if namespace == "CLASS":
             continue
+
+        block_content = block_match.group(2)
+        enums = [m.group(1) for m in enum_pattern.finditer(block_content)]
+        enums_by_namespace.append((namespace, enums))
+
+        for qflags_match in qflags_pattern.finditer(block_content):
+            flags_name = qflags_match.group(1)
+            base_enum_name = qflags_match.group(2).split("::")[-1]
+            flags[base_enum_name] = flags_name
+
+    output = ""
+    for namespace, enums in enums_by_namespace:
         output += f'    <namespace-type name="{namespace}">\n'
-        for enum_match in enum_pattern.finditer(block_match.group(2)):
-            enum_name = enum_match.group(1)
-            output += f'        <enum-type name="{enum_name}" />\n'
+        for enum_name in enums:
+            if enum_name in flags:
+                output += (
+                    f'        <enum-type name="{enum_name}" flags="{flags[enum_name]}" />\n'
+                )
+            else:
+                output += f'        <enum-type name="{enum_name}" />\n'
         output += "    </namespace-type>\n"
+
     return output
 
 
@@ -162,19 +334,34 @@ def gen_widgets():
             content = f.read()
         classes = re.findall(r"class ELA_EXPORT (\w+)", content)
         for cls in classes:
-            if cls in ["ElaFlowLayout", "ElaNavigationBar"]:
-                xmls.append(f'''    <object-type name="{cls}">
-        <extra-includes>
-            <include file-name="layout_helper.hpp" location="local"/>
-        </extra-includes>
-    </object-type>''')
-            else:
+            needs_layout_helper = cls in ["ElaFlowLayout", "ElaNavigationBar"]
+            needs_navigation_specials = cls in ["ElaNavigationBar", "ElaWindow"]
+
+            if not needs_layout_helper and not needs_navigation_specials:
                 xmls.append(f'    <object-type name="{cls}" />')
+                continue
+
+            block = [f'    <object-type name="{cls}">']
+            if needs_layout_helper:
+                block.extend(
+                    [
+                        "        <extra-includes>",
+                        '            <include file-name="layout_helper.hpp" location="local"/>',
+                        "        </extra-includes>",
+                    ]
+                )
+            if needs_navigation_specials:
+                block.append(gen_navigation_specials(cls == "ElaWindow").rstrip())
+            block.append("    </object-type>")
+            xmls.append("\n".join(block))
     return "\n".join(xmls)
 
 
 def main():
     print(f"Generating typesystem.xml to {output_dir}...")
+
+    # 0. 预处理 ElaProperty.h（兼容 Shiboken 的 Q_SIGNAL 宏解析）
+    patch_ela_property_header()
 
     # 1. 生成 C++ 辅助文件
     gen_layout_helper(output_dir)
